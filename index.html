@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가열로 효율 분석 및 아이디어 생성기</title>
+    <!-- Tailwind CSS CDN 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS 라이브러리 추가 (엑셀 파일 처리용) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+        }
+        /* Bar chart styling for visualization */
+        .bar-chart-bar {
+            height: 10px;
+            background-color: #3b82f6; /* Tailwind blue-500 */
+            border-radius: 9999px;
+            transition: width 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 bg-gray-100 min-h-screen">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-10 p-6 bg-white shadow-lg rounded-xl">
+            <h1 class="text-3xl font-extrabold text-blue-800 tracking-tight">
+                🔥 태웅 가열로 효율 분석 및 아이디어 생성기
+            </h1>
+            <p class="mt-2 text-gray-600">
+                가스원단위(Nm3/Ton) 절감을 위한 AI 기반 데이터 통찰력 도구 (가스 이력 단일 파일 지원)
+            </p>
+        </header>
+
+        <!-- 데이터 입력 및 분석 섹션 -->
+        <main class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">
+                1단계: 데이터 업로드 &amp; 분석 사이클 설정
+            </h2>
+
+            <div class="space-y-6">
+                <!-- 1. 파일 업로드 -->
+                <div>
+                    <label for="file-input" class="block text-sm font-medium text-gray-700 mb-2">
+                        ① **필수**: 이력 데이터 (가스누적지침, 시간 포함) &amp; ② **선택**: 집계 데이터 (중량, 단위)
+                    </label>
+                    <input type="file" id="file-input" accept=".csv, .txt, .xlsx" multiple
+                        class="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100 cursor-pointer"
+                    >
+                </div>
+
+                <!-- 업로드된 파일 현황 표시 -->
+                <div id="file-status" class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+                    <p class="text-yellow-800 font-semibold mb-1">파일 준비 상태:</p>
+                    <ul id="file-list" class="list-disc ml-5 text-gray-600">
+                        <li>✅ 필수: 이력 데이터 (가스누적지침 포함)를 업로드해주세요.</li>
+                        <li>(선택) 집계 데이터 (중량, 단위)를 업로드하면 AI 분석이 더욱 정밀해집니다.</li>
+                    </ul>
+                </div>
+                
+                <!-- 2. 사이클 종료 시점 입력 필드 (이력 데이터 로드 후 활성화) -->
+                <div id="cycle-input-section" class="space-y-4 p-4 border rounded-lg bg-gray-50 hidden">
+                    <h3 class="text-lg font-semibold text-gray-700">분석 사이클 종료 시점 목록 설정</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        * 계산할 사이클의 **종료 시각**을 나열해 주세요. (각 줄이 하나의 사이클 종료 시점이며, 이전 줄이 현재 사이클의 시작 시점이 됩니다.)
+                    </p>
+                    <label for="cycle-endpoints" class="block text-sm font-medium text-gray-700">입력 형식: [호기] [YYMMDD] [주/야] [HH:MM]</label>
+                    <textarea id="cycle-endpoints" rows="5" placeholder="예:&#10;17호기 251125 주 05:41&#10;17호기 251126 주 05:41&#10;20호기 251127 야 05:41" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"></textarea>
+                    
+                    <button id="calculate-button" class="w-full py-2 px-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition duration-150 ease-in-out disabled:opacity-50">
+                        사이클별 가스 사용량 계산 및 시각화
+                    </button>
+
+                    <!-- 계산 결과 및 시각화 영역 -->
+                    <div id="visualization-output" class="mt-4 p-3 bg-white border rounded-md min-h-[50px]">
+                        <p class="text-sm text-gray-700 font-semibold mb-2">사이클별 가스 사용량 결과 (Nm³):</p>
+                        
+                        <!-- 복사 가능한 텍스트 영역 및 버튼 추가 -->
+                        <div class="flex items-center space-x-2 mb-3">
+                            <textarea id="copy-output" rows="3" readonly class="flex-grow p-2 text-xs bg-gray-50 border border-gray-300 rounded-md resize-none" placeholder="계산된 결과가 여기에 복사하기 쉬운 형태로 나타납니다."></textarea>
+                            <button id="copy-button" class="px-3 py-2 text-sm bg-indigo-500 text-white rounded-md shadow-md hover:bg-indigo-600 transition duration-150 ease-in-out disabled:opacity-50" disabled>
+                                복사
+                            </button>
+                        </div>
+
+                        <!-- 시각화 테이블 -->
+                        <div id="gas-results-table" class="mt-2 text-sm">N/A</div>
+                    </div>
+                </div>
+
+                <!-- 3. 분석 요청 버튼 -->
+                <button id="analyze-button"
+                        class="w-full py-3 px-4 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 ease-in-out disabled:opacity-50"
+                        disabled>
+                    💡 통합 데이터 기반 AI 분석 및 아이디어 생성 요청
+                </button>
+            </div>
+
+            <!-- 로딩 상태 메시지 -->
+            <div id="loading-spinner" class="mt-6 hidden text-center">
+                <div class="flex items-center justify-center space-x-2">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-blue-600 font-medium">데이터 분석 중... (최적화된 가스 절감 아이디어를 생성하고 있습니다.)</span>
+                </div>
+            </div>
+
+            <!-- 4. 분석 결과 출력 -->
+            <div class="mt-8 pt-6 border-t">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">
+                    2단계: AI 분석 결과 및 실행 아이디어
+                </h2>
+                <div id="result-output" class="p-4 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-gray-700 min-h-[300px]">
+                    여기에 Gemini AI가 분석한 가열 패턴 비효율성, 가스 Loss 가능 지점, 그리고 Nm3/Ton 절감을 위한 **실행 가능한 아이디어 3가지**가 출력됩니다.
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        // Global variables and constants
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        // DOM elements
+        const fileInput = document.getElementById('file-input');
+        const analyzeButton = document.getElementById('analyze-button');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resultOutput = document.getElementById('result-output');
+        const fileListElement = document.getElementById('file-list');
+        const cycleInputSection = document.getElementById('cycle-input-section');
+        const cycleEndpointsInput = document.getElementById('cycle-endpoints');
+        const calculateButton = document.getElementById('calculate-button');
+        const visualizationOutput = document.getElementById('visualization-output');
+        const gasResultsTable = document.getElementById('gas-results-table');
+        const copyOutput = document.getElementById('copy-output');
+        const copyButton = document.getElementById('copy-button');
+
+
+        // Data storage
+        let historyDataContent = ''; // Raw CSV content for history data (필수)
+        let historyDataArray = []; // Parsed array for history data
+        let summaryDataContent = ''; // Raw CSV content for summary data (선택)
+        let cycleAnalysisResults = []; // [{hoGi, startTimeStr, endTimeStr, usage, startGas, endGas}]
+
+        // --- Helper Functions (XLSX, CSV Read/Parse - Omitted for brevity, assumed functional) ---
+
+        // CSV/TXT reading with encoding attempts
+        const readCsvTxt = async (file) => {
+            const attemptRead = (encoding) => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file, encoding);
+            });
+
+            try { return await attemptRead('UTF-8'); } 
+            catch (e) { try { return await attemptRead('EUC-KR'); } 
+            catch (e2) { return null; } }
+        };
+
+        // XLSX reading using SheetJS
+        const readXlsx = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const csvText = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+                    resolve(csvText);
+                } catch (error) { reject("엑셀 파일 변환 오류: " + error.message); }
+            };
+            reader.onerror = (e) => reject("파일 읽기 오류: " + e.target.error);
+            reader.readAsBinaryString(file);
+        });
+        
+        // CSV 텍스트를 파싱하여 배열로 변환
+        const parseCSV = (csvText) => {
+            const lines = csvText.trim().split('\n');
+            if (lines.length < 2) return [];
+
+            const header = lines[0].split(',').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                if (values.length !== header.length) continue; 
+
+                const row = {};
+                header.forEach((h, index) => {
+                    row[h] = values[index].trim();
+                });
+                data.push(row);
+            }
+            return data;
+        };
+
+        // 간소화된 날짜 형식 파싱 (예: 17호기 251125 주 05:41)
+        const parseSimplifiedTime = (input) => {
+            const match = input.match(/(\d{1,2}호기?)\s+(\d{6})\s+(주|야)\s+(\d{2}:\d{2})/);
+            if (!match) return null;
+
+            const [_, hoGiRaw, datePart, shiftPart, timePart] = match;
+            const hoGi = hoGiRaw.replace('호기', '').trim();
+            const year = '20' + datePart.substring(0, 2); 
+            const month = datePart.substring(2, 4);
+            const day = datePart.substring(4, 6);
+            
+            const currentYear = new Date().getFullYear(); 
+            const inputYear = parseInt(year);
+            const fullTimeStr = `${inputYear < currentYear - 5 ? currentYear : year}-${month}-${day} ${timePart}:00`; 
+
+            const date = new Date(fullTimeStr);
+            if (isNaN(date)) return null;
+
+            return {
+                hoGi: hoGi,
+                fullTimeStr: fullTimeStr,
+                rawInput: input
+            };
+        };
+
+        // 가스 누적 지침을 이용한 사용량 계산
+        const getGasUsage = (startTimeStr, endTimeStr, startHoGi, endHoGi) => {
+            const timeKey = Object.keys(historyDataArray[0]).find(key => key.includes('시간'));
+            const gasKey = Object.keys(historyDataArray[0]).find(key => key.includes('가스누적지침'));
+            // IMPORTANT: Check for HoGi Key existence for filtering
+            const hoGiKey = Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
+            
+            if (!timeKey || !gasKey) {
+                return { usage: NaN, startGas: NaN, endGas: NaN, error: '시간 또는 가스누적지침 컬럼 누락' };
+            }
+
+            // Find closest data entry for a specific time and HoGi
+            const findGasEntry = (timeStr, targetHoGi) => {
+                const inputTime = new Date(timeStr).getTime();
+                
+                // --- HoGi Filtering Logic ---
+                // If hoGiKey exists, filter data by HoGi number
+                const dataToSearch = hoGiKey ? 
+                    historyDataArray.filter(row => String(row[hoGiKey]).includes(targetHoGi)) :
+                    historyDataArray;
+                
+                // If HoGi filtering yielded no results, we cannot find the entry.
+                if (hoGiKey && dataToSearch.length === 0) {
+                     return null; 
+                }
+                
+                // Time sorting and searching
+                const sortedData = [...dataToSearch].sort((a, b) => new Date(a[timeKey]) - new Date(b[timeKey]));
+
+                let closestEntry = null;
+                let minTimeDiff = Infinity;
+                
+                for (const entry of sortedData) {
+                    const entryTime = new Date(entry[timeKey]).getTime();
+                    
+                    if (entryTime <= inputTime) {
+                        const timeDiff = inputTime - entryTime;
+                        if (timeDiff < minTimeDiff) {
+                            minTimeDiff = timeDiff;
+                            closestEntry = entry;
+                        }
+                    } else {
+                        break; 
+                    }
+                }
+                return closestEntry;
+            };
+
+            // Use corresponding HoGi for each entry search
+            const startEntry = findGasEntry(startTimeStr, startHoGi); 
+            const endEntry = findGasEntry(endTimeStr, endHoGi); 
+
+            if (!startEntry) return { usage: NaN, startGas: NaN, endGas: NaN, error: `시작(${startHoGi}호기 @ ${startTimeStr.slice(5, 16)}) 지침 누락` };
+            if (!endEntry) return { usage: NaN, startGas: NaN, endGas: NaN, error: `종료(${endHoGi}호기 @ ${endTimeStr.slice(5, 16)}) 지침 누락` };
+            
+            const startGas = parseFloat(startEntry[gasKey]);
+            const endGas = parseFloat(endEntry[gasKey]);
+
+            if (isNaN(startGas) || isNaN(endGas)) return { usage: NaN, startGas: NaN, endGas: NaN, error: '지침 값 비정상 (숫자 아님)' };
+            if (endGas < startGas) return { usage: NaN, startGas: startGas, endGas: endGas, error: '종료 지침 < 시작 지침' };
+
+            const usage = endGas - startGas;
+            return { usage: usage.toFixed(2), startGas: startGas.toFixed(0), endGas: endGas.toFixed(0), error: null };
+        };
+
+        // --- Main Calculation and Visualization ---
+
+        const analyzeCycles = () => {
+            gasResultsTable.innerHTML = '';
+            visualizationOutput.classList.remove('hidden');
+            cycleAnalysisResults = [];
+            copyOutput.value = '';
+            copyButton.disabled = true;
+
+            const rawEndpoints = cycleEndpointsInput.value.trim().split('\n').filter(line => line.trim() !== '');
+            if (rawEndpoints.length < 2) {
+                gasResultsTable.innerHTML = '<span class="text-red-500 font-bold">⚠️ 최소 2개 이상의 사이클 종료 시점을 입력해야 합니다. (이전 차수 종료 시각이 현재 차수 시작 시각이 됨)</span>';
+                return;
+            }
+            
+            // [NEW CHECK 1] HoGi Key 존재 여부 체크
+            const hoGiKey = Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
+            if (!hoGiKey) {
+                 const firstHoGi = parseSimplifiedTime(rawEndpoints[0])?.hoGi;
+                 if (firstHoGi) { // If user input HoGi but data lacks HoGi key
+                    gasResultsTable.innerHTML = `<span class="text-red-500 font-bold">⚠️ 이력 데이터에 '호기' 또는 '가열로명' 컬럼이 없어 호기별 데이터 구분이 불가능합니다. 파일 내 컬럼명을 확인해주세요.</span>`;
+                    updateUIStatus(false);
+                    return;
+                 }
+                 // If HoGi Key is missing but user didn't input HoGi, we proceed assuming single HoGi.
+            }
+
+            let parsedEndpoints = [];
+            for (const line of rawEndpoints) {
+                const parsed = parseSimplifiedTime(line);
+                if (parsed) {
+                    parsedEndpoints.push(parsed);
+                } else {
+                    gasResultsTable.innerHTML = `<span class="text-red-500 font-bold">⚠️ 입력 형식 오류: '${line}'을 [호기] [YYMMDD] [주/야] [HH:MM] 형식으로 변환할 수 없습니다.</span>`;
+                    return;
+                }
+            }
+            
+            if (parsedEndpoints.length < 2) {
+                 gasResultsTable.innerHTML = '<span class="text-red-500 font-bold">⚠️ 유효한 사이클 종료 시점이 2개 미만입니다.</span>';
+                 return;
+            }
+
+            let maxUsage = 0;
+            let results = [];
+            let copyText = '날짜 / 사용전 누적지침 / 사용후 누적지침 / 가열로호기\n';
+            
+            // 사이클 분석 (i는 종료 시점)
+            for (let i = 1; i < parsedEndpoints.length; i++) {
+                const currentCycleEnd = parsedEndpoints[i];
+                const previousCycleEnd = parsedEndpoints[i - 1]; // 현재 사이클의 시작 시점
+
+                // 이전 로직에서 호기가 달라도 계산하도록 수정했으므로, 여기서는 단순히 계산 시도를 합니다.
+                const { usage, startGas, endGas, error } = getGasUsage(
+                    previousCycleEnd.fullTimeStr, 
+                    currentCycleEnd.fullTimeStr, 
+                    previousCycleEnd.hoGi, // 시작 호기
+                    currentCycleEnd.hoGi   // 종료 호기
+                );
+                
+                results.push({
+                    hoGi: currentCycleEnd.hoGi,
+                    startTime: previousCycleEnd.fullTimeStr,
+                    endTime: currentCycleEnd.fullTimeStr,
+                    usage: usage,
+                    startGas: startGas,
+                    endGas: endGas,
+                    error: error
+                });
+                
+                if (!isNaN(parseFloat(usage))) {
+                    maxUsage = Math.max(maxUsage, parseFloat(usage));
+                }
+                
+                // 복사 텍스트 생성
+                if (!error) {
+                    const datePart = currentCycleEnd.fullTimeStr.substring(2, 10).replace(/-/g, ''); // YYMMDD
+                    const line = `${datePart} / ${startGas} / ${endGas} / ${currentCycleEnd.hoGi}호기\n`;
+                    copyText += line;
+                }
+            }
+
+            cycleAnalysisResults = results.filter(r => !r.error); 
+            copyOutput.value = copyText;
+            
+            // 결과 시각화
+            let tableHtml = `<table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사이클</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">호기</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시작 → 종료 시간</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사용량 (Nm³)</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시각화</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">`;
+
+            let hasValidResult = false;
+            
+            results.forEach((r, index) => {
+                const usage = r.usage;
+                const percentage = !isNaN(parseFloat(usage)) && maxUsage > 0 ? (parseFloat(usage) / maxUsage) * 100 : 0;
+                
+                if (!r.error) hasValidResult = true;
+
+                // 시간 출력 형식을 'MM-DD HH:MM'으로 간소화
+                const formatTime = (timeStr) => timeStr.slice(5, 16); 
+
+                tableHtml += `
+                    <tr>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${index + 1}차</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-blue-600">${r.hoGi}호기</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500">${r.startTime ? formatTime(r.startTime) : 'N/A'} → ${formatTime(r.endTime)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-bold ${r.error ? 'text-red-500' : 'text-green-600'}">${r.error ? r.error : usage}</td>
+                        <td class="px-3 py-2">
+                            <div class="w-full bg-gray-200 rounded-full">
+                                <div class="bar-chart-bar" style="width: ${percentage}%;"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table>`;
+            
+            gasResultsTable.innerHTML = tableHtml;
+            
+            // 최종 UI 상태 업데이트 및 복사 버튼 활성화
+            if (hasValidResult) {
+                updateUIStatus(true);
+                copyButton.disabled = false;
+            } else {
+                updateUIStatus(false);
+                copyOutput.value = '유효한 계산 결과가 없습니다.';
+            }
+        };
+
+        // 클립보드 복사 함수
+        const copyToClipboard = () => {
+            const textToCopy = copyOutput.value;
+            try {
+                const tempInput = document.createElement('textarea');
+                tempInput.value = textToCopy;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                
+                copyButton.textContent = '✅ 복사 완료!';
+                setTimeout(() => {
+                    copyButton.textContent = '복사';
+                }, 1500);
+
+            } catch (err) {
+                resultOutput.innerHTML = `⚠️ 복사 실패: 브라우저 보안 정책으로 인해 자동 복사가 차단되었습니다. 텍스트 창의 내용을 수동으로 복사해주세요.`;
+            }
+        };
+
+
+        // --- Event Handlers & Initial Setup ---
+
+        // UI 상태 업데이트 및 분석 버튼 활성화/비활성화
+        const updateUIStatus = (isCalculated = false) => {
+            fileListElement.innerHTML = '';
+            
+            const historyReady = historyDataContent.length > 0;
+            const summaryReady = summaryDataContent.length > 0;
+            const inputHasValue = cycleEndpointsInput.value.trim() !== '';
+
+            let statusHtml = '';
+
+            // 필수 파일 상태
+            if (historyReady) {
+                statusHtml += `<li class="text-green-600 font-semibold">✅ 1. 필수: 이력 데이터 로드 완료 (${(historyDataContent.length / 1024).toFixed(1)} KB)</li>`;
+                cycleInputSection.classList.remove('hidden');
+            } else {
+                statusHtml += `<li class="text-red-500 font-semibold">❌ 1. 필수: 이력 데이터 (가스누적지침)를 업로드해주세요.</li>`;
+                cycleInputSection.classList.add('hidden');
+            }
+
+            // 선택 파일 상태
+            if (summaryReady) {
+                statusHtml += `<li class="text-green-600">(선택) 집계 데이터 로드 완료 (${(summaryDataContent.length / 1024).toFixed(1)} KB)</li>`;
+            } else {
+                statusHtml += `<li class="text-gray-500">(선택) 집계 데이터 (중량, 단위)는 업로드되지 않았습니다.</li>`;
+            }
+
+            fileListElement.innerHTML = statusHtml;
+
+            // 최종 분석 버튼 활성화 조건: 1. 필수 파일(이력) 로드 2. 유효한 입력 값 3. 계산 완료
+            if (historyReady && inputHasValue && isCalculated) {
+                analyzeButton.disabled = false;
+                if (!resultOutput.innerHTML.includes("🎉 모든 준비 완료!")) {
+                    resultOutput.innerHTML = `<span class="text-green-600 font-bold">🎉 모든 준비 완료!</span> 시각화된 데이터 기반으로 AI 분석 요청이 가능합니다.`;
+                }
+            } else {
+                analyzeButton.disabled = true;
+                copyButton.disabled = true;
+                if (historyReady && !isCalculated) {
+                     resultOutput.innerHTML = `⚠️ 이력 데이터는 로드되었습니다. '사이클 종료 시점 목록'을 입력하고 '가스 사용량 계산' 버튼을 눌러주세요.`;
+                } else if (!historyReady) {
+                     resultOutput.innerHTML = `⚠️ 분석을 시작하려면 **이력 데이터(가스누적지침 포함)**가 반드시 필요합니다. 파일을 먼저 업로드해주세요.`;
+                }
+            }
+        };
+
+
+        // 파일 내용 읽기 (멀티 파일 처리 로직)
+        fileInput.addEventListener('change', async (event) => {
+            const files = event.target.files;
+            
+            // 데이터 초기화
+            historyDataContent = '';
+            summaryDataContent = '';
+            historyDataArray = [];
+            cycleAnalysisResults = [];
+            gasResultsTable.innerHTML = 'N/A';
+            copyOutput.value = '';
+
+            if (files.length === 0) {
+                updateUIStatus(false);
+                return;
+            }
+
+            resultOutput.innerHTML = `<span class="text-blue-600">파일을 읽는 중입니다. 파일의 종류를 식별하고 있습니다...</span>`;
+            
+            let historyCount = 0; // 이력 데이터 카운트
+            let summaryCount = 0; // 집계 데이터 카운트
+            
+            for (const file of files) {
+                let content = null;
+                const fileName = file.name.toLowerCase();
+
+                if (fileName.endsWith('.xlsx')) {
+                    try {
+                        content = await readXlsx(file);
+                    } catch (error) {
+                        resultOutput.innerHTML = `⚠️ 엑셀 파일 처리 오류 (${file.name}): ${error.message}`;
+                        updateUIStatus(false);
+                        return;
+                    }
+                } else if (fileName.endsWith('.csv') || fileName.endsWith('.txt')) {
+                    content = await readCsvTxt(file);
+                } else {
+                     resultOutput.innerHTML = `⚠️ 지원하지 않는 파일 형식 (${file.name})입니다. CSV, TXT, XLSX 파일을 선택해주세요.`;
+                     updateUIStatus(false);
+                     return;
+                }
+                
+                if (content) {
+                    // 파일 종류 식별 (대략적인 컬럼명 기반)
+                    if (content.includes('중량') || content.includes('단위가스사용량') || content.includes('가열시작일시')) {
+                        // 집계 데이터로 식별
+                        if (summaryCount === 0) {
+                            summaryDataContent = content;
+                            summaryCount++;
+                        } else {
+                            resultOutput.innerHTML = `⚠️ 집계 데이터가 2개 이상 업로드되었습니다. 가장 마지막 파일만 사용됩니다.`;
+                        }
+                    } else if (content.includes('온도') && content.includes('가스') && content.includes('시간') && content.includes('가스누적지침')) {
+                        // 이력 데이터로 식별 (필수 조건 충족)
+                        if (historyCount === 0) {
+                            historyDataContent = content;
+                            historyCount++;
+                            historyDataArray = parseCSV(content);
+                        } else {
+                            resultOutput.innerHTML = `⚠️ 이력 데이터가 2개 이상 업로드되었습니다. 가장 마지막 파일만 사용됩니다.`;
+                        }
+                    } else {
+                        // 식별 불가 또는 필수 조건(가스누적지침) 미포함
+                        // 중요: 이력 데이터로 간주하되, 나중에 필수 컬럼 유무를 다시 체크
+                        if (historyCount === 0) {
+                             historyDataContent = content;
+                             historyCount++;
+                             historyDataArray = parseCSV(content);
+                        }
+                    }
+                }
+            }
+            
+            // 필수 컬럼 누락 최종 체크
+            if (historyDataContent && !historyDataContent.includes('가스누적지침')) {
+                 resultOutput.innerHTML = `⚠️ 이력 데이터에 **'가스누적지침'** 컬럼이 포함되어야 계산이 가능합니다. 파일을 확인해주세요.`;
+                 historyDataContent = ''; 
+                 historyDataArray = [];
+            }
+
+
+            updateUIStatus(false);
+        });
+        
+        // 가스 사용량 계산 버튼 이벤트 리스너
+        calculateButton.addEventListener('click', analyzeCycles);
+        
+        // 입력 필드 값이 변경되면 계산 결과 초기화
+        cycleEndpointsInput.addEventListener('input', () => {
+            cycleAnalysisResults = [];
+            gasResultsTable.innerHTML = 'N/A';
+            copyOutput.value = '';
+            updateUIStatus(false);
+        });
+
+        // 복사 버튼 이벤트 리스너
+        copyButton.addEventListener('click', copyToClipboard);
+
+
+        // AI 분석 요청 버튼 처리
+        analyzeButton.addEventListener('click', async () => {
+            if (cycleAnalysisResults.length === 0) return;
+
+            // UI 상태 변경
+            analyzeButton.disabled = true;
+            loadingSpinner.classList.remove('hidden');
+            resultOutput.innerHTML = '데이터 분석 중입니다. 잠시만 기다려주세요...';
+
+            // 데이터는 최대 10,000자로 제한하여 전송 (Gemini API의 토큰 한계 고려)
+            const limitedHistory = historyDataContent.substring(0, 10000); 
+            const limitedSummary = summaryDataContent.substring(0, 5000); 
+            
+            // 계산된 결과 요약
+            const cycleReport = cycleAnalysisResults.map(r => 
+                `[${r.hoGi}호기, ${r.startTime.slice(5, 16)}~${r.endTime.slice(5, 16)}]: ${r.usage} Nm³ (시작지침: ${r.startGas}, 종료지침: ${r.endGas})`
+            ).join('\n');
+            
+            // 집계 데이터 유무에 따른 프롬프트 분기
+            const summaryPrompt = summaryDataContent.length > 0 ? 
+                `
+                **[2. 집계 데이터 (중량, 단위가스사용량)]**
+                - 내용: 일별 또는 작업 사이클별 '중량(kg)', '총 가스 사용량', '단위가스사용량(Nm3/Ton)' 등의 집계 정보입니다.
+                - 분석 용도: 전반적인 효율 수준 파악 및 비효율적인 사이클/날짜 식별.
+                ---
+                ${limitedSummary} 
+                ---
+                
+                2. **[집계 데이터 연관 분석]** 집계 데이터를 기반으로 이 사이클의 효율이 과거 대비 어떤 수준인지 판단하고, 개선 가능성을 제시하세요.
+                ` 
+                : 
+                `
+                **[2. 집계 데이터 (중량, 단위가스사용량)]**
+                - (집계 데이터가 업로드되지 않았습니다. 패턴 분석에만 집중해 주세요.)
+                `;
+
+
+            // 프롬프트 구성 (두 파일 내용 + 계산된 가스 사용량 통합)
+            const userQuery = `
+                다음은 태웅의 가열로 효율 분석을 위한 이력 데이터와 ${summaryDataContent.length > 0 ? '선택적 집계 데이터' : '추가 집계 데이터 없이'} **다수 사이클의 실제 가스 사용량 계산 결과** 정보입니다.
+                
+                **[1. 이력 데이터 (가스, 온도 - 분 단위 시계열)]**
+                - 내용: 분 단위의 '시간', '실제 온도', '가스 유량', '가스누적지침' 등의 이력입니다.
+                - 분석 용도: 가열 패턴 비효율, 불필요한 고온 홀딩 구간, 가스 Loss 지점 식별.
+                ---
+                ${limitedHistory} 
+                ---
+
+                ${summaryPrompt}
+                
+                **[3. 다수 사이클별 가스 사용량 분석 결과]**
+                - **분석 결과 (Nm³):**
+                ${cycleReport}
+                
+                **[Nm3/Ton 절감 목표 집중 분석 요청]**
+                제공된 정보를 종합하여 가스 원단위(Nm3/Ton) 절감을 위한 3가지 실행 가능한 아이디어를 도출해 주세요.
+                
+                1. **[비효율 사이클 식별]** 계산된 사용량이 가장 높은 사이클(가스 사용량 수치 및 이력 데이터 패턴)을 기준으로, 해당 사이클에서 가스 소비를 비정상적으로 높인 **가열 패턴 비효율성 (예: 과도한 홀딩, 목표 온도 초과 유지)**을 상세 분석하세요.
+                ${summaryDataContent.length > 0 ? '' : '// 집계 데이터가 없으므로 2번 항목은 생략합니다.'}
+                
+                결과 형식:
+                1. [분석 통찰력] 제공된 정보를 결합하여 발견된 가장 중요한 비효율 패턴 및 Loss 지점 요약.
+                2. [가장 현실적인 아이디어] IT팀 지원 없이 바로 적용 가능한 공정 개선 아이디어 (예: 작업자 교육, 오퍼레이션 변경).
+                3. [도전적 아이디어] 단기적 투자 또는 협업이 필요하지만 효과가 큰 아이디어 (예: 센서 활용, 시스템 개선).
+            `;
+
+            const systemPrompt = "당신은 자유형단조기업의 20년 경력 생산 공정 전문가이자 에너지 효율 컨설턴트입니다. 항상 Nm3/Ton 절감 목표에 초점을 맞추어 구체적이고 실질적인 개선 아이디어를 제시하십시오. 추상적인 설명은 피하고, 숫자로 측정 가능한 행동 항목 중심으로 작성하세요. 모든 답변은 한국어로만 하세요.";
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            const maxRetries = 3;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && i < maxRetries - 1) {
+                            const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        }
+                        throw new Error(`API Error: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 받아오지 못했습니다. 데이터 형식을 확인해 주세요.";
+
+                    resultOutput.innerHTML = text;
+                    break;
+
+                } catch (error) {
+                    console.error("Gemini API 호출 오류:", error);
+                    resultOutput.innerHTML = `⚠️ 통신 오류 발생: ${error.message}. API 키와 네트워크 상태를 확인하세요.`;
+                }
+            }
+
+            // UI 상태 복구
+            analyzeButton.disabled = false;
+            loadingSpinner.classList.add('hidden');
+        });
+
+    </script>
+</body>
+</html>
