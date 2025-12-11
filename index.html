@@ -231,11 +231,10 @@
             };
         };
 
-        // 가스 누적 지침을 이용한 사용량 계산
+        // 가스 누적 지침을 이용한 사용량 계산 (HoGi Key 체크 로직 완화)
         const getGasUsage = (startTimeStr, endTimeStr, startHoGi, endHoGi) => {
             const timeKey = Object.keys(historyDataArray[0]).find(key => key.includes('시간'));
             const gasKey = Object.keys(historyDataArray[0]).find(key => key.includes('가스누적지침'));
-            // IMPORTANT: Check for HoGi Key existence for filtering
             const hoGiKey = Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
             
             if (!timeKey || !gasKey) {
@@ -246,14 +245,15 @@
             const findGasEntry = (timeStr, targetHoGi) => {
                 const inputTime = new Date(timeStr).getTime();
                 
-                // --- HoGi Filtering Logic ---
-                // If hoGiKey exists, filter data by HoGi number
-                const dataToSearch = hoGiKey ? 
-                    historyDataArray.filter(row => String(row[hoGiKey]).includes(targetHoGi)) :
-                    historyDataArray;
+                // --- HoGi Filtering Logic (ONLY IF HoGi Key Exists) ---
+                let dataToSearch = historyDataArray;
+                if (hoGiKey) {
+                    dataToSearch = historyDataArray.filter(row => String(row[hoGiKey]).includes(targetHoGi));
+                }
+                // *수정된 부분*: hoGiKey가 없으면 전체 데이터를 사용함.
                 
-                // If HoGi filtering yielded no results, we cannot find the entry.
                 if (hoGiKey && dataToSearch.length === 0) {
+                     // HoGi Key가 있지만 해당 호기 데이터가 없을 때만 Null 반환 (데이터 누락)
                      return null; 
                 }
                 
@@ -283,8 +283,13 @@
             const startEntry = findGasEntry(startTimeStr, startHoGi); 
             const endEntry = findGasEntry(endTimeStr, endHoGi); 
 
-            if (!startEntry) return { usage: NaN, startGas: NaN, endGas: NaN, error: `시작(${startHoGi}호기 @ ${startTimeStr.slice(5, 16)}) 지침 누락` };
-            if (!endEntry) return { usage: NaN, startGas: NaN, endGas: NaN, error: `종료(${endHoGi}호기 @ ${endTimeStr.slice(5, 16)}) 지침 누락` };
+            // *수정된 부분*: HoGi Key가 없는 경우에도 계산이 진행될 수 있도록 오류 메시지 간소화
+            if (!startEntry) {
+                 return { usage: NaN, startGas: NaN, endGas: NaN, error: `시작(${startHoGi}호기 @ ${startTimeStr.slice(5, 16)}) 시점 데이터 누락` };
+            }
+            if (!endEntry) {
+                 return { usage: NaN, startGas: NaN, endGas: NaN, error: `종료(${endHoGi}호기 @ ${endTimeStr.slice(5, 16)}) 시점 데이터 누락` };
+            }
             
             const startGas = parseFloat(startEntry[gasKey]);
             const endGas = parseFloat(endEntry[gasKey]);
@@ -311,17 +316,8 @@
                 return;
             }
             
-            // [NEW CHECK 1] HoGi Key 존재 여부 체크
-            const hoGiKey = Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
-            if (!hoGiKey) {
-                 const firstHoGi = parseSimplifiedTime(rawEndpoints[0])?.hoGi;
-                 if (firstHoGi) { // If user input HoGi but data lacks HoGi key
-                    gasResultsTable.innerHTML = `<span class="text-red-500 font-bold">⚠️ 이력 데이터에 '호기' 또는 '가열로명' 컬럼이 없어 호기별 데이터 구분이 불가능합니다. 파일 내 컬럼명을 확인해주세요.</span>`;
-                    updateUIStatus(false);
-                    return;
-                 }
-                 // If HoGi Key is missing but user didn't input HoGi, we proceed assuming single HoGi.
-            }
+            // 호기 키 존재 여부 (이후 로직에서 참조)
+            const hoGiKeyExists = !!Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
 
             let parsedEndpoints = [];
             for (const line of rawEndpoints) {
@@ -348,7 +344,12 @@
                 const currentCycleEnd = parsedEndpoints[i];
                 const previousCycleEnd = parsedEndpoints[i - 1]; // 현재 사이클의 시작 시점
 
-                // 이전 로직에서 호기가 달라도 계산하도록 수정했으므로, 여기서는 단순히 계산 시도를 합니다.
+                // HoGi Key가 없고 입력된 호기가 다르면 경고 (계산은 진행시키되 UI에서 경고)
+                if (!hoGiKeyExists && currentCycleEnd.hoGi !== previousCycleEnd.hoGi) {
+                    // 경고는 하지만 계산은 전체 데이터로 진행
+                    console.warn(`이력 데이터에 호기 컬럼이 없어 호기 (${currentCycleEnd.hoGi})가 바뀌어도 데이터 필터링 없이 전체 데이터를 사용합니다.`);
+                }
+                
                 const { usage, startGas, endGas, error } = getGasUsage(
                     previousCycleEnd.fullTimeStr, 
                     currentCycleEnd.fullTimeStr, 
