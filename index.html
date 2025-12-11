@@ -912,7 +912,8 @@
             cycleAnalysisResults = []; 
             gasResultsTable.innerHTML = 'N/A';
             copyTools.classList.add('hidden');
-            calculatedDataDisplay.value = ''; // NEW: 텍스트 영역 초기화
+            // calculatedDataDisplay.value = ''; // NEW: 텍스트 영역 초기화
+            drawCopyableTable([]);
             updateHoGiFilter(); // 필터링 메뉴 초기화
             updateUIStatus(false);
         });
@@ -969,62 +970,4 @@
                 
                 **[3. 다수 사이클별 가스 사용량 분석 결과]**
                 - **분석 결과 (Nm³):**
-                ${cycleReport}
-                
-                **[Nm3/Ton 절감 목표 집중 분석 요청]**
-                제공된 정보를 종합하여 가스 원단위(Nm3/Ton) 절감을 위한 3가지 실행 가능한 아이디어를 도출해 주세요.
-                
-                1. **[비효율 사이클 식별]** 계산된 사용량이 가장 높은 사이클(가스 사용량 수치 및 이력 데이터 패턴)을 기준으로, 해당 사이클에서 가스 소비를 비정상적으로 높인 **가열 패턴 비효율성 (예: 과도한 홀딩, 목표 온도 초과 유지)**을 상세 분석하세요.
-                ${summaryDataContent.length > 0 ? '' : '// 집계 데이터가 없으므로 2번 항목은 생략합니다.'}
-                
-                결과 형식:
-                1. [분석 통찰력] 제공된 정보를 결합하여 발견된 가장 중요한 비효율 패턴 및 Loss 지점 요약.
-                2. [가장 현실적인 아이디어] IT팀 지원 없이 바로 적용 가능한 공정 개선 아이디어 (예: 작업자 교육, 오퍼레이션 변경).
-                3. [도전적 아이디어] 단기적 투자 또는 협업이 필요하지만 효과가 큰 아이디어 (예: 센서 활용, 시스템 개선).
-            `;
-
-            const systemPrompt = "당신은 자유형단조기업의 20년 경력 생산 공정 전문가이자 에너지 효율 컨설턴트입니다. 항상 Nm3/Ton 절감 목표에 초점을 맞추어 구체적이고 실질적인 개선 아이디어를 제시하십시오. 추상적인 설명은 피하고, 숫자로 측정 가능한 행동 항목 중심으로 작성하세요.";
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-            };
-
-            const maxRetries = 3;
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        if (response.status === 429 && i < maxRetries - 1) {
-                            const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            continue;
-                        }
-                        throw new Error(`API Error: ${response.statusText}`);
-                    }
-
-                    const result = await response.json();
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 받아오지 못했습니다. 데이터 형식을 확인해 주세요.";
-
-                    resultOutput.innerHTML = text;
-                    break;
-
-                } catch (error) {
-                    console.error("Gemini API 호출 오류:", error);
-                    resultOutput.innerHTML = `⚠️ 통신 오류 발생: ${error.message}. API 키와 네트워크 상태를 확인하세요。`;
-                }
-            }
-
-            // UI 상태 복구
-            analyzeButton.disabled = false;
-            loadingSpinner.classList.add('hidden');
-        });
-
-    </script>
-</body>
-</html>
+                ${cycle
