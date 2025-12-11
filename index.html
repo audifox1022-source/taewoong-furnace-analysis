@@ -250,7 +250,6 @@
                 if (hoGiKey) {
                     dataToSearch = historyDataArray.filter(row => String(row[hoGiKey]).includes(targetHoGi));
                 }
-                // *수정된 부분*: hoGiKey가 없으면 전체 데이터를 사용함.
                 
                 if (hoGiKey && dataToSearch.length === 0) {
                      // HoGi Key가 있지만 해당 호기 데이터가 없을 때만 Null 반환 (데이터 누락)
@@ -318,7 +317,7 @@
             
             // 호기 키 존재 여부 (이후 로직에서 참조)
             const hoGiKeyExists = !!Object.keys(historyDataArray[0]).find(key => key.includes('호기') || key.includes('가열로명'));
-
+            
             let parsedEndpoints = [];
             for (const line of rawEndpoints) {
                 const parsed = parseSimplifiedTime(line);
@@ -348,6 +347,7 @@
                 if (!hoGiKeyExists && currentCycleEnd.hoGi !== previousCycleEnd.hoGi) {
                     // 경고는 하지만 계산은 전체 데이터로 진행
                     console.warn(`이력 데이터에 호기 컬럼이 없어 호기 (${currentCycleEnd.hoGi})가 바뀌어도 데이터 필터링 없이 전체 데이터를 사용합니다.`);
+                    gasResultsTable.innerHTML = `<span class="text-yellow-600 font-bold">⚠️ 경고: 호기 컬럼이 없어 호기별 구분이 불가능합니다. 전체 데이터 기반으로 계산됩니다.</span>`;
                 }
                 
                 const { usage, startGas, endGas, error } = getGasUsage(
